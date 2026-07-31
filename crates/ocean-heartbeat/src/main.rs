@@ -113,6 +113,11 @@ enum Command {
         /// Default is to fail (a wake targets a specific existing agent).
         #[arg(long)]
         allow_new_session: bool,
+        /// Pin this wake turn to a specific model id (e.g. `deepseek-v4-pro`).
+        /// Without it the daemon uses its single current model for EVERY session,
+        /// so a pad of differently-named seats all answer as the same model.
+        #[arg(long)]
+        model: Option<String>,
     },
 }
 
@@ -172,6 +177,7 @@ async fn main() -> Result<()> {
             timeout_seconds,
             no_wait,
             allow_new_session,
+            model,
         } => {
             let code = wake_once(
                 &cli.daemon_url,
@@ -185,6 +191,7 @@ async fn main() -> Result<()> {
                     timeout_seconds,
                     no_wait,
                     allow_new_session,
+                    model,
                 },
             )
             .await
@@ -213,6 +220,7 @@ struct WakeArgs {
     timeout_seconds: u64,
     no_wait: bool,
     allow_new_session: bool,
+    model: Option<String>,
 }
 
 async fn wake_once(daemon_url: &str, args: WakeArgs) -> Result<i32> {
@@ -278,6 +286,12 @@ async fn wake_once(daemon_url: &str, args: WakeArgs) -> Result<i32> {
     }
     if let Some(sid) = session_id.as_ref() {
         body["session_id"] = json!(sid);
+    }
+    // Pin the model for this turn. The daemon holds ONE current model, so without
+    // this every woken session answers as that model regardless of which agent the
+    // pad addressed — differently-named seats become the same brain in name tags.
+    if let Some(model) = args.model.as_ref() {
+        body["model_id"] = json!(model);
     }
 
     let url = format!("{base}/v1/agent/turns");
